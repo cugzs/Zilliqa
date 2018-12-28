@@ -24,6 +24,9 @@
 #include "libUtils/SafeMath.h"
 #include "libUtils/SysCommand.h"
 
+// 5mb
+const unsigned int MAX_SCILLA_OUTPUT_SIZE_IN_BYTES = 5120;
+
 template <class MAP>
 AccountStoreSC<MAP>::AccountStoreSC() {
   m_accountStoreAtomic = std::make_unique<AccountStoreAtomic<MAP>>(*this);
@@ -622,7 +625,14 @@ bool AccountStoreSC<MAP>::ParseCallContractOutput(
     outStr = {std::istreambuf_iterator<char>(in),
               std::istreambuf_iterator<char>()};
   }
-  LOG_GENERAL(INFO, "Output: " << std::endl << outStr);
+
+  LOG_GENERAL(
+      INFO,
+      "Output: " << std::endl
+                 << (outStr.length() > MAX_SCILLA_OUTPUT_SIZE_IN_BYTES
+                         ? outStr.substr(0, MAX_SCILLA_OUTPUT_SIZE_IN_BYTES) +
+                               "\n ... "
+                         : outStr));
 
   Json::CharReaderBuilder builder;
   std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
