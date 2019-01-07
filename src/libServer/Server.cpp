@@ -15,8 +15,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "JSONConversion.h"
-
 #include <jsonrpccpp/server.h>
 #include <boost/multiprecision/cpp_dec_float.hpp>
 #pragma GCC diagnostic push
@@ -25,6 +23,8 @@
 #pragma GCC diagnostic pop
 #include <iostream>
 
+#include "AddressChecksum.h"
+#include "JSONConversion.h"
 #include "Server.h"
 #include "common/Messages.h"
 #include "common/Serializable.h"
@@ -375,11 +375,11 @@ Json::Value Server::GetBalance(const string& address) {
   LOG_MARKER();
 
   try {
-    if (address.size() != ACC_ADDR_SIZE * 2) {
-      throw JsonRpcException(RPC_INVALID_PARAMETER,
-                             "Address size not appropriate");
+    string lower_case_addr;
+    if (!AddressChecksum::VerifyChecksumAddress(address, lower_case_addr)) {
+      throw JsonRpcException(RPC_INVALID_PARAMETER, "Address not appropriate");
     }
-    bytes tmpaddr = DataConversion::HexStrToUint8Vec(address);
+    bytes tmpaddr = DataConversion::HexStrToUint8Vec(lower_case_addr);
     Address addr(tmpaddr);
     const Account* account = AccountStore::GetInstance().GetAccount(addr);
 
@@ -411,11 +411,11 @@ Json::Value Server::GetSmartContractState(const string& address) {
 
   try {
     Json::Value _json;
-    if (address.size() != ACC_ADDR_SIZE * 2) {
-      throw JsonRpcException(RPC_INVALID_PARAMETER,
-                             "Address size not appropriate");
+    string lower_case_addr;
+    if (!AddressChecksum::VerifyChecksumAddress(address, lower_case_addr)) {
+      throw JsonRpcException(RPC_INVALID_PARAMETER, "Address not appropriate");
     }
-    bytes tmpaddr = DataConversion::HexStrToUint8Vec(address);
+    bytes tmpaddr = DataConversion::HexStrToUint8Vec(lower_case_addr);
     Address addr(tmpaddr);
     const Account* account = AccountStore::GetInstance().GetAccount(addr);
 
@@ -438,9 +438,9 @@ Json::Value Server::GetSmartContractInit(const string& address) {
 
   try {
     Json::Value _json;
-    if (address.size() != ACC_ADDR_SIZE * 2) {
-      throw JsonRpcException(RPC_INVALID_PARAMETER,
-                             "Address size not appropriate");
+    string lower_case_addr;
+    if (!AddressChecksum::VerifyChecksumAddress(address, lower_case_addr)) {
+      throw JsonRpcException(RPC_INVALID_PARAMETER, "Address not appropriate");
     }
     bytes tmpaddr = DataConversion::HexStrToUint8Vec(address);
     Address addr(tmpaddr);
@@ -468,11 +468,11 @@ Json::Value Server::GetSmartContractCode(const string& address) {
   LOG_MARKER();
 
   try {
-    if (address.size() != ACC_ADDR_SIZE * 2) {
-      throw JsonRpcException(RPC_INVALID_PARAMETER,
-                             "Address size not appropriate");
+    string lower_case_addr;
+    if (!AddressChecksum::VerifyChecksumAddress(address, lower_case_addr)) {
+      throw JsonRpcException(RPC_INVALID_PARAMETER, "Address not appropriate");
     }
-    bytes tmpaddr = DataConversion::HexStrToUint8Vec(address);
+    bytes tmpaddr = DataConversion::HexStrToUint8Vec(lower_case_addr);
     Address addr(tmpaddr);
     const Account* account = AccountStore::GetInstance().GetAccount(addr);
 
@@ -500,11 +500,11 @@ Json::Value Server::GetSmartContractCode(const string& address) {
 Json::Value Server::GetSmartContracts(const string& address) {
   LOG_MARKER();
   try {
-    if (address.size() != ACC_ADDR_SIZE * 2) {
-      throw JsonRpcException(RPC_INVALID_PARAMETER,
-                             "Address size not appropriate");
+    string lower_case_addr;
+    if (!AddressChecksum::VerifyChecksumAddress(address, lower_case_addr)) {
+      throw JsonRpcException(RPC_INVALID_PARAMETER, "Address not appropriate");
     }
-    bytes tmpaddr = DataConversion::HexStrToUint8Vec(address);
+    bytes tmpaddr = DataConversion::HexStrToUint8Vec(lower_case_addr);
     Address addr(tmpaddr);
     const Account* account = AccountStore::GetInstance().GetAccount(addr);
 
