@@ -181,6 +181,13 @@ void Lookup::SetAboveLayer() {
       PubKey pubKey(
           DataConversion::HexStrToUint8Vec(v.second.get<std::string>("pubkey")),
           0);
+
+      if (find_if(m_seedNodes.begin(), m_seedNodes.end(),
+                  [&pubKey](const pair<PubKey, Peer>& x) {
+                    return (pubKey == x.first);
+                  }) != m_seedNodes.end()) {
+        continue;
+      }
       m_seedNodes.emplace_back(pubKey, lookup_node);
     }
   }
