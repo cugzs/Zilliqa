@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <vector>
@@ -53,15 +51,25 @@ bool Validator::CheckCreatedTransaction(const Transaction& tx,
 
   // LOG_GENERAL(INFO, "Tran: " << tx.GetTranID());
 
+  if (DataConversion::UnpackA(tx.GetVersion()) != CHAIN_ID) {
+    LOG_GENERAL(WARNING, "CHAIN_ID incorrect");
+    return false;
+  }
+
   // Check if from account is sharded here
   const PubKey& senderPubKey = tx.GetSenderPubKey();
   Address fromAddr = Account::GetAddressFromPublicKey(senderPubKey);
 
+  if (fromAddr == Address()) {
+    LOG_GENERAL(WARNING, "Invalid address for issuing transactions");
+    return false;
+  }
+
   // Check if from account exists in local storage
   if (!AccountStore::GetInstance().IsAccountExist(fromAddr)) {
-    LOG_GENERAL(INFO, "fromAddr not found: " << fromAddr
-                                             << ". Transaction rejected: "
-                                             << tx.GetTranID());
+    LOG_GENERAL(WARNING, "fromAddr not found: " << fromAddr
+                                                << ". Transaction rejected: "
+                                                << tx.GetTranID());
     return false;
   }
 
@@ -74,6 +82,8 @@ bool Validator::CheckCreatedTransaction(const Transaction& tx,
                   << " Debit Amount = " << tx.GetAmount());
     return false;
   }
+
+  receipt.SetEpochNum(m_mediator.m_currentEpochNum);
 
   return AccountStore::GetInstance().UpdateAccountsTemp(
       m_mediator.m_currentEpochNum, m_mediator.m_node->getNumShards(),
@@ -90,11 +100,21 @@ bool Validator::CheckCreatedTransactionFromLookup(const Transaction& tx) {
 
   // LOG_MARKER();
 
+  if (DataConversion::UnpackA(tx.GetVersion()) != CHAIN_ID) {
+    LOG_GENERAL(WARNING, "CHAIN_ID incorrect");
+    return false;
+  }
+
   // Check if from account is sharded here
   const PubKey& senderPubKey = tx.GetSenderPubKey();
   Address fromAddr = Account::GetAddressFromPublicKey(senderPubKey);
   unsigned int shardId = m_mediator.m_node->GetShardId();
   unsigned int numShards = m_mediator.m_node->getNumShards();
+
+  if (fromAddr == Address()) {
+    LOG_GENERAL(WARNING, "Invalid address for issuing transactions");
+    return false;
+  }
 
   if (m_mediator.m_ds->m_mode == DirectoryService::Mode::IDLE) {
     unsigned int correct_shard_from =
@@ -206,9 +226,9 @@ bool Validator::CheckBlockCosignature(const DirectoryBlock& block,
   block.GetCS1().Serialize(serializedHeader, serializedHeader.size());
   BitVector::SetBitVector(serializedHeader, serializedHeader.size(),
                           block.GetB1());
-  if (!Schnorr::GetInstance().Verify(serializedHeader, 0,
-                                     serializedHeader.size(), block.GetCS2(),
-                                     *aggregatedKey)) {
+  if (!MultiSig::GetInstance().MultiSigVerify(serializedHeader, 0,
+                                              serializedHeader.size(),
+                                              block.GetCS2(), *aggregatedKey)) {
     LOG_GENERAL(WARNING, "Cosig verification failed");
     for (auto& kv : keys) {
       LOG_GENERAL(WARNING, kv);

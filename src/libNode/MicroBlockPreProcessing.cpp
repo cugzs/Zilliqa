@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <array>
@@ -78,7 +76,7 @@ bool Node::ComposeMicroBlock() {
   if (m_mediator.GetIsVacuousEpoch() &&
       m_mediator.m_ds->m_mode != DirectoryService::IDLE) {
     if (!SafeMath<uint128_t>::add(m_mediator.m_ds->m_totalTxnFees,
-                                  COINBASE_REWARD, rewards)) {
+                                  COINBASE_REWARD_PER_DS, rewards)) {
       LOG_GENERAL(WARNING, "rewards addition unsafe!");
     }
   } else {
@@ -296,6 +294,8 @@ void Node::ProcessTransactionWhenShardLeader() {
   m_gasUsedTotal = 0;
   m_txnFees = 0;
 
+  vector<Transaction> gasLimitExceededTxnBuffer;
+
   while (m_gasUsedTotal < MICROBLOCK_GAS_LIMIT) {
     Transaction t;
     TransactionReceipt tr;
@@ -307,6 +307,11 @@ void Node::ProcessTransactionWhenShardLeader() {
       // nonce if has and with larger gasPrice then replace with that one.
       // (*optional step)
       t_createdTxns.findSameNonceButHigherGas(t);
+
+      if (m_gasUsedTotal + t.GetGasLimit() > MICROBLOCK_GAS_LIMIT) {
+        gasLimitExceededTxnBuffer.emplace_back(t);
+        continue;
+      }
 
       if (m_mediator.m_validator->CheckCreatedTransaction(t, tr)) {
         if (!SafeMath<uint64_t>::add(m_gasUsedTotal, tr.GetCumGas(),
@@ -399,6 +404,10 @@ void Node::ProcessTransactionWhenShardLeader() {
       t_createdTxns.insert(nonceTxn.second);
     }
   }
+
+  for (const auto& t : gasLimitExceededTxnBuffer) {
+    t_createdTxns.insert(t);
+  }
 }
 
 bool Node::ProcessTransactionWhenShardBackup(
@@ -484,6 +493,8 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
   m_gasUsedTotal = 0;
   m_txnFees = 0;
 
+  vector<Transaction> gasLimitExceededTxnBuffer;
+
   while (m_gasUsedTotal < MICROBLOCK_GAS_LIMIT) {
     Transaction t;
     TransactionReceipt tr;
@@ -495,6 +506,11 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
       // nonce if has and with larger gasPrice then replace with that one.
       // (*optional step)
       t_createdTxns.findSameNonceButHigherGas(t);
+
+      if (m_gasUsedTotal + t.GetGasLimit() > MICROBLOCK_GAS_LIMIT) {
+        gasLimitExceededTxnBuffer.emplace_back(t);
+        continue;
+      }
 
       if (m_mediator.m_validator->CheckCreatedTransaction(t, tr)) {
         if (!SafeMath<uint64_t>::add(m_gasUsedTotal, tr.GetCumGas(),
@@ -571,6 +587,10 @@ bool Node::VerifyTxnsOrdering(const vector<TxnHash>& tranHashes) {
     for (const auto& nonceTxn : kv.second) {
       t_createdTxns.insert(nonceTxn.second);
     }
+  }
+
+  for (const auto& t : gasLimitExceededTxnBuffer) {
+    t_createdTxns.insert(t);
   }
 
   if (!VerifyTxnOrderWTolerance(t_tranHashes, tranHashes,
@@ -1036,10 +1056,10 @@ bool Node::CheckMicroBlockHashes(bytes& errorMsg) {
   // Check Rewards
   if (m_mediator.GetIsVacuousEpoch() &&
       m_mediator.m_ds->m_mode != DirectoryService::IDLE) {
-    // Check COINBASE_REWARD + totalTxnFees
+    // Check COINBASE_REWARD_PER_DS + totalTxnFees
     uint128_t rewards = 0;
     if (!SafeMath<uint128_t>::add(m_mediator.m_ds->m_totalTxnFees,
-                                  COINBASE_REWARD, rewards)) {
+                                  COINBASE_REWARD_PER_DS, rewards)) {
       LOG_GENERAL(WARNING, "total_reward addition unsafe!");
     }
     if (rewards != m_microblock->GetHeader().GetRewards()) {

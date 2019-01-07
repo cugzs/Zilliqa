@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "Constants.h"
 #include "libUtils/SafeMath.h"
@@ -67,6 +65,9 @@ const unsigned int MSG_VERSION{ReadConstantNumeric("MSG_VERSION")};
 const unsigned int DEBUG_LEVEL{ReadConstantNumeric("DEBUG_LEVEL")};
 const bool ENABLE_DO_REJOIN{ReadConstantString("ENABLE_DO_REJOIN") == "true"};
 const bool LOOKUP_NODE_MODE{ReadConstantString("LOOKUP_NODE_MODE") == "true"};
+const unsigned int MAX_ENTRIES_FOR_DIAGNOSTIC_DATA{
+    ReadConstantNumeric("MAX_ENTRIES_FOR_DIAGNOSTIC_DATA")};
+const uint16_t CHAIN_ID{(uint16_t)ReadConstantNumeric("CHAIN_ID")};
 
 // Archival constants
 const bool ARCHIVAL_NODE{
@@ -206,6 +207,13 @@ const unsigned int ROUND_TIME_IN_MS{
     ReadConstantNumeric("ROUND_TIME_IN_MS", "node.gossip.")};
 const unsigned int SIMULATED_NETWORK_DELAY_IN_MS{
     ReadConstantNumeric("SIMULATED_NETWORK_DELAY_IN_MS", "node.gossip.")};
+const unsigned int KEEP_RAWMSG_FROM_LAST_N_ROUNDS{
+    ReadConstantNumeric("KEEP_RAWMSG_FROM_LAST_N_ROUNDS", "node.gossip.")};
+const bool SIGN_VERIFY_EMPTY_MSGTYP{
+    ReadConstantString("SIGN_VERIFY_EMPTY_MSGTYP", "node.gossip.") == "true"};
+const bool SIGN_VERIFY_NONEMPTY_MSGTYP{
+    ReadConstantString("SIGN_VERIFY_NONEMPTY_MSGTYP", "node.gossip.") ==
+    "true"};
 
 // GPU mining constants
 const string GPU_TO_USE{ReadConstantString("GPU_TO_USE", "node.gpu.")};
@@ -241,6 +249,10 @@ const unsigned int COMM_SIZE{
     ReadConstantNumeric("COMM_SIZE", "node.network_composition.")};
 const unsigned int NUM_DS_ELECTION{
     ReadConstantNumeric("NUM_DS_ELECTION", "node.network_composition.")};
+const unsigned int SHARD_SIZE_TOLERANCE_LO{ReadConstantNumeric(
+    "SHARD_SIZE_TOLERANCE_LO", "node.network_composition.")};
+const unsigned int SHARD_SIZE_TOLERANCE_HI{ReadConstantNumeric(
+    "SHARD_SIZE_TOLERANCE_HI", "node.network_composition.")};
 
 // P2PComm constants
 const unsigned int BROADCAST_INTERVAL{
@@ -258,6 +270,8 @@ const unsigned int PUMPMESSAGE_MILLISECONDS{
     ReadConstantNumeric("PUMPMESSAGE_MILLISECONDS", "node.p2pcomm.")};
 const unsigned int SENDQUEUE_SIZE{
     ReadConstantNumeric("SENDQUEUE_SIZE", "node.p2pcomm.")};
+const unsigned int MAX_GOSSIP_MSG_SIZE_IN_BYTES{
+    ReadConstantNumeric("MAX_GOSSIP_MSG_SIZE_IN_BYTES", "node.p2pcomm.")};
 
 // PoW constants
 const bool CUDA_GPU_MINE{ReadConstantString("CUDA_GPU_MINE", "node.pow.") ==
@@ -359,8 +373,12 @@ const unsigned int NUM_TXN_TO_SEND_PER_ACCOUNT{
     ReadConstantNumeric("NUM_TXN_TO_SEND_PER_ACCOUNT", "node.tests.")};
 
 // Transaction constants
-const boost::multiprecision::uint128_t COINBASE_REWARD{
-    ReadConstantString("COINBASE_REWARD", "node.transactions.")};
+const boost::multiprecision::uint128_t TOTAL_COINBASE_REWARD{
+    ReadConstantString("TOTAL_COINBASE_REWARD", "node.transactions.")};
+const boost::multiprecision::uint128_t COINBASE_REWARD_PER_DS{
+    ReadConstantString("COINBASE_REWARD_PER_DS", "node.transactions.")};
+const unsigned int BASE_REWARD_IN_PERCENT{
+    ReadConstantNumeric("BASE_REWARD_IN_PERCENT", "node.transactions.")};
 const unsigned int LOOKUP_REWARD_IN_PERCENT{
     ReadConstantNumeric("LOOKUP_REWARD_IN_PERCENT", "node.transactions.")};
 const unsigned int MAX_CODE_SIZE_IN_BYTES{
@@ -388,3 +406,9 @@ const unsigned int VIEWCHANGE_TIME{
 const vector<string> GENESIS_WALLETS{
     ReadAccountsFromConstantsFile("wallet_address")};
 const vector<string> GENESIS_KEYS{ReadAccountsFromConstantsFile("private_key")};
+
+// Verifier
+const std::string VERIFIER_PATH{
+    ReadConstantString("VERIFIER_PATH", "node.verifier.")};
+const std::string VERIFIER_PUBKEY{
+    ReadConstantString("VERIFIER_PUBKEY", "node.verifier.")};

@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <algorithm>
@@ -105,9 +103,9 @@ void DirectoryService::ProcessViewChangeConsensusWhenDone() {
   }
   m_pendingVCBlock->GetCS1().Serialize(message, message.size());
   BitVector::SetBitVector(message, message.size(), m_pendingVCBlock->GetB1());
-  if (not Schnorr::GetInstance().Verify(message, 0, message.size(),
-                                        m_pendingVCBlock->GetCS2(),
-                                        *aggregatedKey)) {
+  if (!MultiSig::GetInstance().MultiSigVerify(message, 0, message.size(),
+                                              m_pendingVCBlock->GetCS2(),
+                                              *aggregatedKey)) {
     LOG_GENERAL(WARNING, "cosig verification fail");
     for (auto& kv : keys) {
       LOG_GENERAL(WARNING, kv);
@@ -205,7 +203,7 @@ void DirectoryService::ProcessViewChangeConsensusWhenDone() {
         m_pendingVCBlock->GetHeader().GetCandidateLeaderNetworkInfo());
     if (candidateLeaderInfo.first == m_mediator.m_selfKey.first &&
         candidateLeaderInfo.second == m_mediator.m_selfPeer) {
-      m_consensusLeaderID = m_consensusMyID;
+      m_consensusLeaderID = m_consensusMyID.load();
     } else {
       deque<pair<PubKey, Peer>>::iterator iterConsensusLeaderID =
           find(m_mediator.m_DSCommittee->begin(),
@@ -231,8 +229,8 @@ void DirectoryService::ProcessViewChangeConsensusWhenDone() {
       lock_guard<mutex> g(m_mediator.m_node->m_mutexShardMember);
       m_mediator.m_node->m_myShardMembers = m_mediator.m_DSCommittee;
     }
-    m_mediator.m_node->m_consensusMyID = m_consensusMyID;
-    m_mediator.m_node->m_consensusLeaderID = m_consensusLeaderID;
+    m_mediator.m_node->m_consensusMyID = m_consensusMyID.load();
+    m_mediator.m_node->m_consensusLeaderID = m_consensusLeaderID.load();
     if (m_mediator.m_node->m_consensusMyID ==
         m_mediator.m_node->m_consensusLeaderID) {
       m_mediator.m_node->m_isPrimary = true;
@@ -264,7 +262,6 @@ void DirectoryService::ProcessViewChangeConsensusWhenDone() {
   }
 
   SendDataToLookupFunc t_sendDataToLookupFunc = nullptr;
-  SendDataToShardFunc t_sendDataToShardFunc = nullptr;
   // Broadcasting vcblock to lookup nodes iff view change do not occur before ds
   // block consensus. This is to be consistent with how normal node process the
   // vc block (before ds block).
@@ -285,7 +282,6 @@ void DirectoryService::ProcessViewChangeConsensusWhenDone() {
     }
     case FINALBLOCK_CONSENSUS:
     case FINALBLOCK_CONSENSUS_PREP: {
-      t_sendDataToShardFunc = SendDataToShardFuncDefault;
       break;
     }
     case VIEWCHANGE_CONSENSUS:
@@ -296,17 +292,25 @@ void DirectoryService::ProcessViewChangeConsensusWhenDone() {
           "illegal view change state. state: " << to_string(viewChangeState));
   }
 
-  if (t_sendDataToLookupFunc || t_sendDataToShardFunc) {
+  if (t_sendDataToLookupFunc) {
     auto composeVCBlockForSender =
         [this](vector<unsigned char>& vcblock_message) -> bool {
       return ComposeVCBlockForSender(vcblock_message);
     };
 
+    // Acquire shard receivers cosigs from MicroBlocks
+    unordered_map<uint32_t, BlockBase> t_microBlocks;
+    const auto& microBlocks = m_microBlocks
+        [m_mediator.m_txBlockChain.GetLastBlock().GetHeader().GetBlockNum()];
+    for (const auto& microBlock : microBlocks) {
+      t_microBlocks.emplace(microBlock.GetHeader().GetShardId(), microBlock);
+    }
+
     DataSender::GetInstance().SendDataToOthers(
-        *m_pendingVCBlock, tmpDSCommittee, m_shards,
+        *m_pendingVCBlock, tmpDSCommittee, m_shards, t_microBlocks,
         m_mediator.m_lookup->GetLookupNodes(),
         m_mediator.m_txBlockChain.GetLastBlock().GetBlockHash(),
-        composeVCBlockForSender, t_sendDataToLookupFunc, t_sendDataToShardFunc);
+        m_consensusMyID, composeVCBlockForSender, t_sendDataToLookupFunc);
   }
 }
 

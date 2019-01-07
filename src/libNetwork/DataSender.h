@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #ifndef __DATASENDER_H__
@@ -58,15 +56,23 @@ class DataSender : Singleton<DataSender> {
       const std::deque<std::pair<PubKey, Peer>>& tmpCommittee,
       const uint16_t& indexB2);
 
+  void DetermineNodesToSendDataTo(
+      const DequeOfShard& shards,
+      const std::unordered_map<uint32_t, BlockBase>& blockswcosigRecver,
+      const uint16_t& consensusMyId, const unsigned int& my_shards_lo,
+      const unsigned int& my_shards_hi,
+      std::deque<std::vector<Peer>>& sharded_receivers);
+
   bool SendDataToOthers(
       const BlockBase& blockwcosig,
       const std::deque<std::pair<PubKey, Peer>>& sendercommittee,
-      const DequeOfShard& shards, const VectorOfLookupNode& lookups,
-      const BlockHash& hashForRandom, const ComposeMessageForSenderFunc&,
+      const DequeOfShard& shards,
+      const std::unordered_map<uint32_t, BlockBase>& blockswcosigRecver,
+      const VectorOfLookupNode& lookups, const BlockHash& hashForRandom,
+      const uint16_t& consensusMyId, const ComposeMessageForSenderFunc&,
       const SendDataToLookupFunc& sendDataToLookupFunc =
           SendDataToLookupFuncDefault,
-      const SendDataToShardFunc& sendDataToShardFunc =
-          SendDataToShardFuncDefault);
+      const SendDataToShardFunc& sendDataToShardFunc = nullptr);
 };
 
 #endif  // __DATASENDER_H__

@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "ConsensusLeader.h"
@@ -279,10 +277,11 @@ bool ConsensusLeader::ProcessMessageCommitCore(
   uint16_t backupID = 0;
 
   CommitPoint commitPoint;
+  CommitPointHash commitPointHash;
 
-  if (!Messenger::GetConsensusCommit(commit, offset, m_consensusID,
-                                     m_blockNumber, m_blockHash, backupID,
-                                     commitPoint, m_committee)) {
+  if (!Messenger::GetConsensusCommit(
+          commit, offset, m_consensusID, m_blockNumber, m_blockHash, backupID,
+          commitPoint, commitPointHash, m_committee)) {
     LOG_GENERAL(WARNING, "Messenger::GetConsensusCommit failed.");
     return false;
   }
@@ -295,6 +294,21 @@ bool ConsensusLeader::ProcessMessageCommitCore(
   // Check the commit
   if (!commitPoint.Initialized()) {
     LOG_GENERAL(WARNING, "Invalid commit received");
+    return false;
+  }
+
+  // Check the deserialized commit hash
+  if (!commitPointHash.Initialized()) {
+    LOG_GENERAL(WARNING, "Invalid commit hash received");
+    return false;
+  }
+
+  // Check the value of the commit hash
+  CommitPointHash commitPointHashExpected(commitPoint);
+  if (!(commitPointHashExpected == commitPointHash)) {
+    LOG_GENERAL(WARNING, "Commit hash check failed. Deserialized = "
+                             << string(commitPointHash) << " Expected = "
+                             << string(commitPointHashExpected));
     return false;
   }
 
@@ -547,6 +561,12 @@ bool ConsensusLeader::ProcessMessageResponseCore(
   subset.responseMap.at(backupID) = true;
   subset.responseCounter++;
 
+  if (subset.responseCounter % 10 == 0) {
+    LOG_GENERAL(INFO, "[Subset " << subsetID << "] Received "
+                                 << subset.responseCounter << " out of "
+                                 << m_numForConsensus << ".");
+  }
+
   // Generate collective sig if sufficient responses have been obtained
   // ==================================================================
 
@@ -710,8 +730,8 @@ bool ConsensusLeader::GenerateCollectiveSigMessage(bytes& collectivesig,
   }
 
   // Verify the collective signature
-  if (!Schnorr::GetInstance().Verify(m_messageToCosign, subset.collectiveSig,
-                                     aggregated_key)) {
+  if (!MultiSig::GetInstance().MultiSigVerify(
+          m_messageToCosign, subset.collectiveSig, aggregated_key)) {
     LOG_GENERAL(WARNING, "Collective sig verification failed");
     SetStateSubset(subsetID, ERROR);
 

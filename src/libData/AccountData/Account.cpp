@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "Account.h"
@@ -61,12 +59,12 @@ void Account::InitStorage() {
   }
 }
 
-void Account::InitContract(const bytes& data) {
+void Account::InitContract(const bytes& data, const Address& addr) {
   SetInitData(data);
-  InitContract();
+  InitContract(addr);
 }
 
-void Account::InitContract() {
+void Account::InitContract(const Address& addr) {
   // LOG_MARKER();
   if (m_initData.empty()) {
     LOG_GENERAL(WARNING, "Init data for the contract is empty");
@@ -92,6 +90,15 @@ void Account::InitContract() {
     createBlockNumObj["vname"] = "_creation_block";
     createBlockNumObj["type"] = "BNum";
     createBlockNumObj["value"] = to_string(GetCreateBlockNum());
+    m_initValJson.append(createBlockNumObj);
+  }
+
+  // Append _this_address
+  {
+    Json::Value createBlockNumObj;
+    createBlockNumObj["vname"] = "_this_address";
+    createBlockNumObj["type"] = "ByStr20";
+    createBlockNumObj["value"] = "0x" + addr.hex();
     m_initValJson.append(createBlockNumObj);
   }
 
@@ -140,25 +147,26 @@ bool Account::Deserialize(const bytes& src, unsigned int offset) {
   return true;
 }
 
-bool Account::SerializeDelta(bytes& dst, unsigned int offset,
-                             Account* oldAccount, const Account& newAccount) {
-  if (!Messenger::SetAccountDelta(dst, offset, oldAccount, newAccount)) {
-    LOG_GENERAL(WARNING, "Messenger::SetAccountDelta failed.");
-    return false;
-  }
+// bool Account::SerializeDelta(bytes& dst, unsigned int offset,
+//                              Account* oldAccount, const Account& newAccount)
+//                              {
+//   if (!Messenger::SetAccountDelta(dst, offset, oldAccount, newAccount)) {
+//     LOG_GENERAL(WARNING, "Messenger::SetAccountDelta failed.");
+//     return false;
+//   }
 
-  return true;
-}
+//   return true;
+// }
 
-bool Account::DeserializeDelta(const bytes& src, unsigned int offset,
-                               Account& account, bool fullCopy) {
-  if (!Messenger::GetAccountDelta(src, offset, account, fullCopy)) {
-    LOG_GENERAL(WARNING, "Messenger::GetAccountDelta failed.");
-    return false;
-  }
+// bool Account::DeserializeDelta(const bytes& src, unsigned int offset,
+//                                Account& account, bool fullCopy) {
+//   if (!Messenger::GetAccountDelta(src, offset, account, fullCopy)) {
+//     LOG_GENERAL(WARNING, "Messenger::GetAccountDelta failed.");
+//     return false;
+//   }
 
-  return true;
-}
+//   return true;
+// }
 
 bool Account::IncreaseBalance(const uint128_t& delta) {
   return SafeMath<uint128_t>::add(m_balance, delta, m_balance);

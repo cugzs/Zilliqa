@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #ifndef __MESSENGER_H__
 #define __MESSENGER_H__
@@ -35,8 +33,6 @@ class Messenger {
  public:
   template <class K, class V>
   static bool CopyWithSizeCheck(const K& arr, V& result) {
-    LOG_MARKER();
-
     // Fixed length copying.
     if (arr.size() != result.size()) {
       LOG_GENERAL(WARNING, "Size check while copying failed. Size expected = "
@@ -67,8 +63,8 @@ class Messenger {
 
   static bool SetAccountDelta(bytes& dst, const unsigned int offset,
                               Account* oldAccount, const Account& newAccount);
-  static bool GetAccountDelta(const bytes& src, const unsigned int offset,
-                              Account& account, const bool fullCopy);
+  // static bool GetAccountDelta(const bytes& src, const unsigned int offset,
+  //                             Account& account, const bool fullCopy);
 
   // These are called by AccountStoreBase template class
   template <class MAP>
@@ -193,6 +189,13 @@ class Messenger {
                                                  FallbackBlock& fallbackblock,
                                                  DequeOfShard& shards);
 
+  static bool SetDiagnosticData(bytes& dst, const unsigned int offset,
+                                const DequeOfShard& shards,
+                                const DequeOfDSNode& dsCommittee);
+  static bool GetDiagnosticData(const bytes& src, const unsigned int offset,
+                                DequeOfShard& shards,
+                                DequeOfDSNode& dsCommittee);
+
   // ============================================================================
   // Peer Manager messages
   // ============================================================================
@@ -226,11 +229,12 @@ class Messenger {
 
   static bool SetDSPoWPacketSubmission(
       bytes& dst, const unsigned int offset,
-      const std::vector<DSPowSolution>& dsPowSolutions);
+      const std::vector<DSPowSolution>& dsPowSolutions,
+      const std::pair<PrivKey, PubKey>& keys);
 
   static bool GetDSPowPacketSubmission(
       const bytes& src, const unsigned int offset,
-      std::vector<DSPowSolution>& dsPowSolutions);
+      std::vector<DSPowSolution>& dsPowSolutions, PubKey& pubKey);
 
   static bool SetDSMicroBlockSubmission(
       bytes& dst, const unsigned int offset, const unsigned char microBlockType,
@@ -309,16 +313,14 @@ class Messenger {
                                        DequeOfShard& shards);
 
   static bool SetNodeFinalBlock(bytes& dst, const unsigned int offset,
-                                const uint32_t shardId,
                                 const uint64_t dsBlockNumber,
                                 const uint32_t consensusID,
                                 const TxBlock& txBlock,
                                 const bytes& stateDelta);
 
   static bool GetNodeFinalBlock(const bytes& src, const unsigned int offset,
-                                uint32_t& shardId, uint64_t& dsBlockNumber,
-                                uint32_t& consensusID, TxBlock& txBlock,
-                                bytes& stateDelta);
+                                uint64_t& dsBlockNumber, uint32_t& consensusID,
+                                TxBlock& txBlock, bytes& stateDelta);
 
   static bool SetNodeVCBlock(bytes& dst, const unsigned int offset,
                              const VCBlock& vcBlock);
@@ -638,12 +640,13 @@ class Messenger {
                                  const uint64_t blockNumber,
                                  const bytes& blockHash,
                                  const uint16_t backupID,
-                                 const CommitPoint& commit,
+                                 const CommitPoint& commitPoint,
+                                 const CommitPointHash& commitPointHash,
                                  const std::pair<PrivKey, PubKey>& backupKey);
   static bool GetConsensusCommit(
       const bytes& src, const unsigned int offset, const uint32_t consensusID,
       const uint64_t blockNumber, const bytes& blockHash, uint16_t& backupID,
-      CommitPoint& commit,
+      CommitPoint& commitPoint, CommitPointHash& commitPointHash,
       const std::deque<std::pair<PubKey, Peer>>& committeeKeys);
 
   static bool SetConsensusChallenge(
@@ -755,5 +758,14 @@ class Messenger {
       const bytes& src, const unsigned int offset,
       std::vector<DSGuardUpdateStruct>& vecOfDSGuardUpdateStruct,
       PubKey& lookupPubKey);
+
+  static bool SetSeedNodeHistoricalDB(
+      bytes& dst, const unsigned int offset,
+      const std::pair<PrivKey, PubKey>& archivalKeys, const uint32_t code,
+      const std::string& path);
+  static bool GetSeedNodeHistoricalDB(const bytes& src,
+                                      const unsigned int offset,
+                                      PubKey& archivalPubKey, uint32_t& code,
+                                      std::string& path);
 };
 #endif  // __MESSENGER_H__

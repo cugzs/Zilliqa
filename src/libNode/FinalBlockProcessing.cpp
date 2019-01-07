@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <array>
@@ -281,8 +279,8 @@ bool Node::VerifyFinalBlockCoSignature(const TxBlock& txblock) {
   }
   txblock.GetCS1().Serialize(message, message.size());
   BitVector::SetBitVector(message, message.size(), txblock.GetB1());
-  if (!Schnorr::GetInstance().Verify(message, 0, message.size(),
-                                     txblock.GetCS2(), *aggregatedKey)) {
+  if (!MultiSig::GetInstance().MultiSigVerify(
+          message, 0, message.size(), txblock.GetCS2(), *aggregatedKey)) {
     LOG_GENERAL(WARNING, "Cosig verification failed");
     for (auto& kv : keys) {
       LOG_GENERAL(WARNING, kv);
@@ -436,13 +434,20 @@ void Node::CallActOnFinalblock() {
       [this](bytes& forwardtxn_message) -> bool {
     return ComposeMBnForwardTxnMessageForSender(forwardtxn_message);
   };
+
+  auto sendMbnFowardTxnToShardNodes =
+      []([[gnu::unused]] const bytes& message,
+         [[gnu::unused]] const DequeOfShard& shards,
+         [[gnu::unused]] const unsigned int& my_shards_lo,
+         [[gnu::unused]] const unsigned int& my_shards_hi) -> void {};
+
   lock_guard<mutex> g(m_mutexShardMember);
   DataSender::GetInstance().SendDataToOthers(
-      *m_microblock, *m_myShardMembers, {},
+      *m_microblock, *m_myShardMembers, {}, {},
       m_mediator.m_lookup->GetLookupNodes(),
-      m_mediator.m_txBlockChain.GetLastBlock().GetBlockHash(),
+      m_mediator.m_txBlockChain.GetLastBlock().GetBlockHash(), m_consensusMyID,
       composeMBnForwardTxnMessageForSender, SendDataToLookupFuncDefault,
-      nullptr);
+      sendMbnFowardTxnToShardNodes);
 }
 
 bool Node::ComposeMBnForwardTxnMessageForSender(bytes& mb_txns_message) {
@@ -594,14 +599,13 @@ bool Node::ProcessFinalBlock(const bytes& message, unsigned int offset,
                              [[gnu::unused]] const Peer& from) {
   LOG_MARKER();
 
-  uint32_t shardId = std::numeric_limits<uint32_t>::max();
   uint64_t dsBlockNumber = 0;
   uint32_t consensusID = 0;
   TxBlock txBlock;
   bytes stateDelta;
 
-  if (!Messenger::GetNodeFinalBlock(message, offset, shardId, dsBlockNumber,
-                                    consensusID, txBlock, stateDelta)) {
+  if (!Messenger::GetNodeFinalBlock(message, offset, dsBlockNumber, consensusID,
+                                    txBlock, stateDelta)) {
     LOG_EPOCH(WARNING, to_string(m_mediator.m_currentEpochNum).c_str(),
               "Messenger::GetNodeFinalBlock failed.");
     return false;
@@ -651,9 +655,6 @@ bool Node::ProcessFinalBlock(const bytes& message, unsigned int offset,
                     << " Received: " << txBlock.GetHeader().GetCommitteeHash());
     return false;
   }
-
-  LOG_EPOCH(INFO, to_string(m_mediator.m_currentEpochNum).c_str(),
-            "DEBUG shard id is " << (unsigned int)shardId)
 
   LogReceivedFinalBlockDetails(txBlock);
 
@@ -740,11 +741,11 @@ bool Node::ProcessFinalBlock(const bytes& message, unsigned int offset,
         LOG_STATE("[REWARD][" << setw(15) << left
                               << m_mediator.m_selfPeer.GetPrintableIPAddress()
                               << "][" << m_mediator.m_currentEpochNum << "]["
-                              << reward << "]");
+                              << reward << "] FLBLK");
       } else {
         LOG_EPOCH(INFO, std::to_string(m_mediator.m_currentEpochNum).c_str(),
                   "[REWARD]"
-                      << "Got no reward thist ds epoch");
+                      << "Got no reward this ds epoch");
       }
     }
   }

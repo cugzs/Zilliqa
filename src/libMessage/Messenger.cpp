@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "Messenger.h"
@@ -299,7 +297,8 @@ void AccountToProtobuf(const Account& account, ProtoAccount& protoAccount) {
   }
 }
 
-bool ProtobufToAccount(const ProtoAccount& protoAccount, Account& account) {
+bool ProtobufToAccount(const ProtoAccount& protoAccount, Account& account,
+                       const Address& addr) {
   uint128_t tmpNumber;
 
   ProtobufByteArrayToNumber<uint128_t, UINT128_SIZE>(protoAccount.balance(),
@@ -343,7 +342,7 @@ bool ProtobufToAccount(const ProtoAccount& protoAccount, Account& account) {
       tmpVec.resize(protoAccount.initdata().size());
       copy(protoAccount.initdata().begin(), protoAccount.initdata().end(),
            tmpVec.begin());
-      account.InitContract(tmpVec);
+      account.InitContract(tmpVec, addr);
     }
 
     for (const auto& entry : protoAccount.storage()) {
@@ -422,7 +421,7 @@ void AccountDeltaToProtobuf(const Account* oldAccount,
 }
 
 bool ProtobufToAccountDelta(const ProtoAccount& protoAccount, Account& account,
-                            const bool fullCopy) {
+                            const Address& addr, const bool fullCopy) {
   uint128_t tmpNumber;
 
   ProtobufByteArrayToNumber<uint128_t, UINT128_SIZE>(protoAccount.balance(),
@@ -474,7 +473,7 @@ bool ProtobufToAccountDelta(const ProtoAccount& protoAccount, Account& account,
 
     if (tmpStorageRoot != account.GetStorageRoot()) {
       if (doInitContract) {
-        account.InitContract();
+        account.InitContract(addr);
       }
 
       dev::h256 tmpHash;
@@ -2034,9 +2033,8 @@ bool Messenger::SetAccount(bytes& dst, const unsigned int offset,
   return SerializeToArray(result, dst, offset);
 }
 
-[[gnu::unused]] bool Messenger::GetAccount(const bytes& src,
-                                           const unsigned int offset,
-                                           Account& account) {
+bool Messenger::GetAccount(const bytes& src, const unsigned int offset,
+                           Account& account) {
   ProtoAccount result;
 
   result.ParseFromArray(src.data() + offset, src.size() - offset);
@@ -2046,7 +2044,9 @@ bool Messenger::SetAccount(bytes& dst, const unsigned int offset,
     return false;
   }
 
-  if (!ProtobufToAccount(result, account)) {
+  Address address;
+
+  if (!ProtobufToAccount(result, account, address)) {
     LOG_GENERAL(WARNING, "ProtobufToAccount failed.");
     return false;
   }
@@ -2069,24 +2069,24 @@ bool Messenger::SetAccountDelta(bytes& dst, const unsigned int offset,
   return SerializeToArray(result, dst, offset);
 }
 
-bool Messenger::GetAccountDelta(const bytes& src, const unsigned int offset,
-                                Account& account, const bool fullCopy) {
-  ProtoAccount result;
+// bool Messenger::GetAccountDelta(const bytes& src, const unsigned int offset,
+//                                 Account& account, const bool fullCopy) {
+//   ProtoAccount result;
 
-  result.ParseFromArray(src.data() + offset, src.size() - offset);
+//   result.ParseFromArray(src.data() + offset, src.size() - offset);
 
-  if (!result.IsInitialized()) {
-    LOG_GENERAL(WARNING, "ProtoAccount initialization failed.");
-    return false;
-  }
+//   if (!result.IsInitialized()) {
+//     LOG_GENERAL(WARNING, "ProtoAccount initialization failed.");
+//     return false;
+//   }
 
-  if (!ProtobufToAccountDelta(result, account, fullCopy)) {
-    LOG_GENERAL(WARNING, "ProtobufToAccountDelta failed.");
-    return false;
-  }
+//   if (!ProtobufToAccountDelta(result, account, addr, fullCopy)) {
+//     LOG_GENERAL(WARNING, "ProtobufToAccountDelta failed.");
+//     return false;
+//   }
 
-  return true;
-}
+//   return true;
+// }
 
 template <class MAP>
 bool Messenger::SetAccountStore(bytes& dst, const unsigned int offset,
@@ -2138,7 +2138,7 @@ bool Messenger::GetAccountStore(const bytes& src, const unsigned int offset,
          entry.address().begin() + min((unsigned int)entry.address().size(),
                                        (unsigned int)address.size),
          address.asArray().begin());
-    if (!ProtobufToAccount(entry.account(), account)) {
+    if (!ProtobufToAccount(entry.account(), account, address)) {
       LOG_GENERAL(WARNING, "ProtobufToAccount failed for account at address "
                                << entry.address());
       return false;
@@ -2172,7 +2172,7 @@ bool Messenger::GetAccountStore(const bytes& src, const unsigned int offset,
          entry.address().begin() + min((unsigned int)entry.address().size(),
                                        (unsigned int)address.size),
          address.asArray().begin());
-    if (!ProtobufToAccount(entry.account(), account)) {
+    if (!ProtobufToAccount(entry.account(), account, address)) {
       LOG_GENERAL(WARNING, "ProtobufToAccount failed for account at address "
                                << entry.address());
       return false;
@@ -2288,7 +2288,7 @@ bool Messenger::GetAccountStoreDelta(const bytes& src,
     }
 
     account = *oriAccount;
-    if (!ProtobufToAccountDelta(entry.account(), account, fullCopy)) {
+    if (!ProtobufToAccountDelta(entry.account(), account, address, fullCopy)) {
       LOG_GENERAL(WARNING,
                   "ProtobufToAccountDelta failed for account at address "
                       << entry.address());
@@ -2344,7 +2344,7 @@ bool Messenger::GetAccountStoreDelta(const bytes& src,
 
     account = *oriAccount;
 
-    if (!ProtobufToAccountDelta(entry.account(), account, fullCopy)) {
+    if (!ProtobufToAccountDelta(entry.account(), account, address, fullCopy)) {
       LOG_GENERAL(WARNING,
                   "ProtobufToAccountDelta failed for account at address "
                       << entry.address());
@@ -2972,6 +2972,39 @@ bool Messenger::GetFallbackBlockWShardingStructure(const bytes& src,
   return ProtobufToShardingStructure(result.sharding(), shards);
 }
 
+bool Messenger::SetDiagnosticData(bytes& dst, const unsigned int offset,
+                                  const DequeOfShard& shards,
+                                  const DequeOfDSNode& dsCommittee) {
+  ProtoDiagnosticData result;
+
+  ShardingStructureToProtobuf(shards, *result.mutable_shards());
+  DSCommitteeToProtobuf(dsCommittee, *result.mutable_dscommittee());
+
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "ProtoDiagnosticData initialization failed");
+    return false;
+  }
+
+  return SerializeToArray(result, dst, offset);
+}
+
+bool Messenger::GetDiagnosticData(const bytes& src, const unsigned int offset,
+                                  DequeOfShard& shards,
+                                  DequeOfDSNode& dsCommittee) {
+  ProtoDiagnosticData result;
+
+  result.ParseFromArray(src.data() + offset, src.size() - offset);
+
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "ProtoDiagnosticData initialization failed");
+    return false;
+  }
+
+  ProtobufToShardingStructure(result.shards(), shards);
+
+  return ProtobufToDSCommittee(result.dscommittee(), dsCommittee);
+}
+
 // ============================================================================
 // Peer Manager messages
 // ============================================================================
@@ -3076,8 +3109,7 @@ bool Messenger::SetDSPoWSubmission(
     result.data().SerializeToArray(tmp.data(), tmp.size());
 
     Signature signature;
-    if (!Schnorr::GetInstance().Sign(tmp, submitterKey.first,
-                                     submitterKey.second, signature)) {
+    if (!MultiSig::GetInstance().SignKey(tmp, submitterKey, signature)) {
       LOG_GENERAL(WARNING, "Failed to sign PoW.");
       return false;
     }
@@ -3131,8 +3163,7 @@ bool Messenger::GetDSPoWSubmission(const bytes& src, const unsigned int offset,
   bytes tmp(result.data().ByteSize());
   result.data().SerializeToArray(tmp.data(), tmp.size());
 
-  if (!Schnorr::GetInstance().Verify(tmp, 0, tmp.size(), signature,
-                                     submitterPubKey)) {
+  if (!MultiSig::GetInstance().VerifyKey(tmp, signature, submitterPubKey)) {
     LOG_GENERAL(WARNING, "PoW submission signature wrong.");
     return false;
   }
@@ -3168,14 +3199,27 @@ bool Messenger::SetDSMicroBlockSubmission(bytes& dst, const unsigned int offset,
 
 bool Messenger::SetDSPoWPacketSubmission(
     bytes& dst, const unsigned int offset,
-    const vector<DSPowSolution>& dsPowSolutions) {
+    const vector<DSPowSolution>& dsPowSolutions,
+    const pair<PrivKey, PubKey>& keys) {
   LOG_MARKER();
 
   DSPoWPacketSubmission result;
 
   for (const auto& sol : dsPowSolutions) {
-    DSPowSolutionToProtobuf(sol, *result.add_dspowsubmissions());
+    DSPowSolutionToProtobuf(sol,
+                            *result.mutable_data()->add_dspowsubmissions());
   }
+
+  SerializableToProtobufByteArray(keys.second, *result.mutable_pubkey());
+
+  bytes tmp(result.data().ByteSize());
+  result.data().SerializeToArray(tmp.data(), tmp.size());
+  Signature signature;
+  if (!Schnorr::GetInstance().Sign(tmp, keys.first, keys.second, signature)) {
+    LOG_GENERAL(WARNING, "Failed to sign DSPoWPacketSubmission");
+    return false;
+  }
+  SerializableToProtobufByteArray(signature, *result.mutable_signature());
 
   if (!result.IsInitialized()) {
     LOG_GENERAL(WARNING, "DSPoWPacketSubmission initialization failed.");
@@ -3185,9 +3229,10 @@ bool Messenger::SetDSPoWPacketSubmission(
   return SerializeToArray(result, dst, offset);
 }
 
-bool Messenger::GetDSPowPacketSubmission(
-    const bytes& src, const unsigned int offset,
-    vector<DSPowSolution>& dsPowSolutions) {
+bool Messenger::GetDSPowPacketSubmission(const bytes& src,
+                                         const unsigned int offset,
+                                         vector<DSPowSolution>& dsPowSolutions,
+                                         PubKey& pubKey) {
   LOG_MARKER();
 
   DSPoWPacketSubmission result;
@@ -3199,7 +3244,17 @@ bool Messenger::GetDSPowPacketSubmission(
     return false;
   }
 
-  for (const auto& powSubmission : result.dspowsubmissions()) {
+  ProtobufByteArrayToSerializable(result.pubkey(), pubKey);
+  Signature signature;
+  ProtobufByteArrayToSerializable(result.signature(), signature);
+  bytes tmp(result.data().ByteSize());
+  result.data().SerializeToArray(tmp.data(), tmp.size());
+  if (!Schnorr::GetInstance().Verify(tmp, 0, tmp.size(), signature, pubKey)) {
+    LOG_GENERAL(WARNING, "DSPoWPacketSubmission signature wrong.");
+    return false;
+  }
+
+  for (const auto& powSubmission : result.data().dspowsubmissions()) {
     DSPowSolution sol;
     ProtobufToDSPowSolution(powSubmission, sol);
     dsPowSolutions.emplace_back(move(sol));
@@ -3686,7 +3741,6 @@ bool Messenger::GetNodeVCDSBlocksMessage(const bytes& src,
 }
 
 bool Messenger::SetNodeFinalBlock(bytes& dst, const unsigned int offset,
-                                  const uint32_t shardId,
                                   const uint64_t dsBlockNumber,
                                   const uint32_t consensusID,
                                   const TxBlock& txBlock,
@@ -3695,7 +3749,6 @@ bool Messenger::SetNodeFinalBlock(bytes& dst, const unsigned int offset,
 
   NodeFinalBlock result;
 
-  result.set_shardid(shardId);
   result.set_dsblocknumber(dsBlockNumber);
   result.set_consensusid(consensusID);
   TxBlockToProtobuf(txBlock, *result.mutable_txblock());
@@ -3710,7 +3763,7 @@ bool Messenger::SetNodeFinalBlock(bytes& dst, const unsigned int offset,
 }
 
 bool Messenger::GetNodeFinalBlock(const bytes& src, const unsigned int offset,
-                                  uint32_t& shardId, uint64_t& dsBlockNumber,
+                                  uint64_t& dsBlockNumber,
                                   uint32_t& consensusID, TxBlock& txBlock,
                                   bytes& stateDelta) {
   LOG_MARKER();
@@ -3724,7 +3777,6 @@ bool Messenger::GetNodeFinalBlock(const bytes& src, const unsigned int offset,
     return false;
   }
 
-  shardId = result.shardid();
   dsBlockNumber = result.dsblocknumber();
   consensusID = result.consensusid();
   if (!ProtobufToTxBlock(result.txblock(), txBlock)) {
@@ -5856,7 +5908,8 @@ bool Messenger::GetLookupSetDirectoryBlocksFromSeed(
 bool Messenger::SetConsensusCommit(
     bytes& dst, const unsigned int offset, const uint32_t consensusID,
     const uint64_t blockNumber, const bytes& blockHash, const uint16_t backupID,
-    const CommitPoint& commit, const pair<PrivKey, PubKey>& backupKey) {
+    const CommitPoint& commitPoint, const CommitPointHash& commitPointHash,
+    const pair<PrivKey, PubKey>& backupKey) {
   LOG_MARKER();
 
   ConsensusCommit result;
@@ -5868,7 +5921,11 @@ bool Messenger::SetConsensusCommit(
   result.mutable_consensusinfo()->set_backupid(backupID);
 
   SerializableToProtobufByteArray(
-      commit, *result.mutable_consensusinfo()->mutable_commit());
+      commitPoint, *result.mutable_consensusinfo()->mutable_commitpoint());
+
+  SerializableToProtobufByteArray(
+      commitPointHash,
+      *result.mutable_consensusinfo()->mutable_commitpointhash());
 
   if (!result.consensusinfo().IsInitialized()) {
     LOG_GENERAL(WARNING, "ConsensusCommit.Data initialization failed.");
@@ -5899,7 +5956,8 @@ bool Messenger::SetConsensusCommit(
 bool Messenger::GetConsensusCommit(
     const bytes& src, const unsigned int offset, const uint32_t consensusID,
     const uint64_t blockNumber, const bytes& blockHash, uint16_t& backupID,
-    CommitPoint& commit, const deque<pair<PubKey, Peer>>& committeeKeys) {
+    CommitPoint& commitPoint, CommitPointHash& commitPointHash,
+    const deque<pair<PubKey, Peer>>& committeeKeys) {
   LOG_MARKER();
 
   ConsensusCommit result;
@@ -5951,7 +6009,10 @@ bool Messenger::GetConsensusCommit(
     return false;
   }
 
-  ProtobufByteArrayToSerializable(result.consensusinfo().commit(), commit);
+  ProtobufByteArrayToSerializable(result.consensusinfo().commitpoint(),
+                                  commitPoint);
+  ProtobufByteArrayToSerializable(result.consensusinfo().commitpointhash(),
+                                  commitPointHash);
 
   bytes tmp(result.consensusinfo().ByteSize());
   result.consensusinfo().SerializeToArray(tmp.data(), tmp.size());
@@ -6925,6 +6986,67 @@ bool Messenger::SetNodeGetNewDSGuardNetworkInfo(
     vecOfDSGuardUpdateStruct.emplace_back(
         DSGuardUpdateStruct(tempPubk, tempPeer, tempTimestamp));
   }
+
+  return true;
+}
+
+bool Messenger::SetSeedNodeHistoricalDB(
+    bytes& dst, const unsigned int offset,
+    const pair<PrivKey, PubKey>& archivalKeys, const uint32_t code,
+    const string& path) {
+  SeedSetHistoricalDB result;
+
+  result.mutable_data()->set_code(code);
+  result.mutable_data()->set_path(path);
+  SerializableToProtobufByteArray(archivalKeys.second,
+                                  *result.mutable_pubkey());
+
+  if (result.data().IsInitialized()) {
+    vector<unsigned char> tmp(result.data().ByteSize());
+    result.data().SerializeToArray(tmp.data(), tmp.size());
+    Signature signature;
+    if (!Schnorr::GetInstance().Sign(tmp, archivalKeys.first,
+                                     archivalKeys.second, signature)) {
+      LOG_GENERAL(WARNING, "Failed to sign SeedSetHistoricalDB");
+      return false;
+    }
+    SerializableToProtobufByteArray(signature, *result.mutable_signature());
+  } else {
+    LOG_GENERAL(WARNING, "SeedSetHistoricalDB.Data initialization failed");
+    return false;
+  }
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "SeedSetHistoricalDB initialization failed.");
+    return false;
+  }
+  return SerializeToArray(result, dst, offset);
+}
+
+bool Messenger::GetSeedNodeHistoricalDB(const bytes& src,
+                                        const unsigned int offset,
+                                        PubKey& archivalPubKey, uint32_t& code,
+                                        string& path) {
+  SeedSetHistoricalDB result;
+
+  result.ParseFromArray(src.data() + offset, src.size() - offset);
+
+  if (!result.IsInitialized()) {
+    LOG_GENERAL(WARNING, "SeedSetHistoricalDB initialization failed ");
+    return false;
+  }
+
+  ProtobufByteArrayToSerializable(result.pubkey(), archivalPubKey);
+  Signature signature;
+  ProtobufByteArrayToSerializable(result.signature(), signature);
+  vector<unsigned char> tmp(result.data().ByteSize());
+  result.data().SerializeToArray(tmp.data(), tmp.size());
+  if (!Schnorr::GetInstance().Verify(tmp, 0, tmp.size(), signature,
+                                     archivalPubKey)) {
+    LOG_GENERAL(WARNING, "SeedSetHistoricalDB signature wrong.");
+    return false;
+  }
+  code = result.data().code();
+  path = result.data().path();
 
   return true;
 }

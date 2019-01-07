@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <boost/algorithm/string/predicate.hpp>
@@ -170,8 +168,9 @@ bool POW::EthashConfigureClient(uint64_t block_number, bool fullDataset) {
 }
 
 ethash_mining_result_t POW::MineLight(ethash_hash256 const& header_hash,
-                                      ethash_hash256 const& boundary) {
-  uint64_t nonce = std::time(0);
+                                      ethash_hash256 const& boundary,
+                                      uint64_t startNonce) {
+  uint64_t nonce = startNonce;
   while (m_shouldMine) {
     auto mineResult = ethash::hash(*m_epochContextLight, header_hash, nonce);
     if (ethash::is_less_or_equal(mineResult.final_hash, boundary)) {
@@ -188,8 +187,9 @@ ethash_mining_result_t POW::MineLight(ethash_hash256 const& header_hash,
 }
 
 ethash_mining_result_t POW::MineFull(ethash_hash256 const& header_hash,
-                                     ethash_hash256 const& boundary) {
-  uint64_t nonce = std::time(0);
+                                     ethash_hash256 const& boundary,
+                                     uint64_t startNonce) {
+  uint64_t nonce = startNonce;
   while (m_shouldMine) {
     auto mineResult = ethash::hash(*m_epochContextFull, header_hash, nonce);
     if (ethash::is_less_or_equal(mineResult.final_hash, boundary)) {
@@ -207,9 +207,10 @@ ethash_mining_result_t POW::MineFull(ethash_hash256 const& header_hash,
 
 ethash_mining_result_t POW::MineFullGPU(uint64_t blockNum,
                                         ethash_hash256 const& header_hash,
-                                        uint8_t difficulty) {
+                                        uint8_t difficulty,
+                                        uint64_t startNonce) {
   std::vector<std::unique_ptr<std::thread>> vecThread;
-  uint64_t nonce = std::time(0);
+  uint64_t nonce = startNonce;
   m_minerIndex = 0;
   // Clear old result
   for (auto& miningResult : m_vecMiningResult) {
@@ -313,13 +314,21 @@ bytes POW::ConcatAndhash(const std::array<unsigned char, UINT256_SIZE>& rand1,
   return sha2_result;
 }
 
-ethash_mining_result_t POW::PoWMine(
-    uint64_t blockNum, uint8_t difficulty,
+ethash_hash256 POW::GenHeaderHash(
     const std::array<unsigned char, UINT256_SIZE>& rand1,
     const std::array<unsigned char, UINT256_SIZE>& rand2,
     const boost::multiprecision::uint128_t& ipAddr, const PubKey& pubKey,
-    uint32_t lookupId, const boost::multiprecision::uint128_t& gasPrice,
-    bool fullDataset) {
+    uint32_t lookupId, const boost::multiprecision::uint128_t& gasPrice) {
+  bytes sha2_result =
+      ConcatAndhash(rand1, rand2, ipAddr, pubKey, lookupId, gasPrice);
+
+  // Let's hash the inputs before feeding to ethash
+  return StringToBlockhash(DataConversion::Uint8VecToHexStr(sha2_result));
+}
+
+ethash_mining_result_t POW::PoWMine(uint64_t blockNum, uint8_t difficulty,
+                                    const ethash_hash256& headerHash,
+                                    bool fullDataset, uint64_t startNonce) {
   LOG_MARKER();
   // mutex required to prevent a new mining to begin before previous mining
   // operation has ended(ie. m_shouldMine=false has been processed) and
@@ -327,41 +336,28 @@ ethash_mining_result_t POW::PoWMine(
   std::lock_guard<std::mutex> g(m_mutexPoWMine);
   EthashConfigureClient(blockNum, fullDataset);
   auto boundary = DifficultyLevelInInt(difficulty);
-  bytes sha3_result =
-      ConcatAndhash(rand1, rand2, ipAddr, pubKey, lookupId, gasPrice);
 
-  // Let's hash the inputs before feeding to ethash
-  auto headerHash =
-      StringToBlockhash(DataConversion::Uint8VecToHexStr(sha3_result));
   ethash_mining_result_t result;
 
   m_shouldMine = true;
 
   if (OPENCL_GPU_MINE || CUDA_GPU_MINE) {
-    result = MineFullGPU(blockNum, headerHash, difficulty);
+    result = MineFullGPU(blockNum, headerHash, difficulty, startNonce);
   } else if (fullDataset) {
-    result = MineFull(headerHash, boundary);
+    result = MineFull(headerHash, boundary, startNonce);
   } else {
-    result = MineLight(headerHash, boundary);
+    result = MineLight(headerHash, boundary, startNonce);
   }
   return result;
 }
 
 bool POW::PoWVerify(uint64_t blockNum, uint8_t difficulty,
-                    const std::array<unsigned char, UINT256_SIZE>& rand1,
-                    const std::array<unsigned char, UINT256_SIZE>& rand2,
-                    const boost::multiprecision::uint128_t& ipAddr,
-                    const PubKey& pubKey, uint32_t lookupId,
-                    const boost::multiprecision::uint128_t& gasPrice,
-                    uint64_t winning_nonce, const std::string& winning_result,
+                    const ethash_hash256& headerHash, uint64_t winning_nonce,
+                    const std::string& winning_result,
                     const std::string& winning_mixhash) {
   LOG_MARKER();
   EthashConfigureClient(blockNum);
   const auto boundary = DifficultyLevelInInt(difficulty);
-  bytes sha3_result =
-      ConcatAndhash(rand1, rand2, ipAddr, pubKey, lookupId, gasPrice);
-  auto headerHash =
-      StringToBlockhash(DataConversion::Uint8VecToHexStr(sha3_result));
   auto winnning_result = StringToBlockhash(winning_result);
   auto winningMixhash = StringToBlockhash(winning_mixhash);
 

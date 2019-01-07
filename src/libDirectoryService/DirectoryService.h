@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #ifndef __DIRECTORYSERVICE_H__
@@ -178,7 +176,7 @@ class DirectoryService : public Executable, public Broadcastable {
   std::condition_variable cv_MissingMicroBlock;
 
   // View Change
-  std::atomic<uint32_t> m_candidateLeaderIndex;
+  std::atomic<uint16_t> m_candidateLeaderIndex;
   std::vector<std::pair<PubKey, Peer>> m_cumulativeFaultyLeaders;
   std::shared_ptr<VCBlock> m_pendingVCBlock;
   std::mutex m_mutexPendingVCBlock;
@@ -321,10 +319,6 @@ class DirectoryService : public Executable, public Broadcastable {
 
   // internal calls from ProcessFinalBlockConsensus
   bool ComposeFinalBlockMessageForSender(bytes& finalblock_message);
-  void SendFinalBlockToShardNodes(const bytes& finalblock_message,
-                                  const DequeOfShard& shards,
-                                  const unsigned int& my_shards_lo,
-                                  const unsigned int& my_shards_hi);
   void ProcessFinalBlockConsensusWhenDone();
   void CommitFinalBlockConsensusBuffer();
 
@@ -416,16 +410,16 @@ class DirectoryService : public Executable, public Broadcastable {
   void SetLastKnownGoodState();
   void RunConsensusOnViewChange();
   void ScheduleViewChangeTimeout();
-  bool ComputeNewCandidateLeader(const uint32_t candidateLeaderIndex);
-  uint32_t CalculateNewLeaderIndex();
+  bool ComputeNewCandidateLeader(const uint16_t candidateLeaderIndex);
+  uint16_t CalculateNewLeaderIndex();
   bool RunConsensusOnViewChangeWhenCandidateLeader(
-      const uint32_t candidateLeaderIndex);
+      const uint16_t candidateLeaderIndex);
   bool RunConsensusOnViewChangeWhenNotCandidateLeader(
-      const uint32_t candidateLeaderIndex);
+      const uint16_t candidateLeaderIndex);
   void ProcessViewChangeConsensusWhenDone();
   void ProcessNextConsensus(unsigned char viewChangeState);
 
-  bool VCFetchLatestDSTxBlockFromLookupNodes();
+  bool VCFetchLatestDSTxBlockFromSeedNodes();
   bytes ComposeVCGetDSTxBlockMessage();
   bool ComposeVCBlockForSender(bytes& vcblock_message);
 
@@ -470,7 +464,7 @@ class DirectoryService : public Executable, public Broadcastable {
   /// Sharing assignment for state delta
   std::vector<Peer> m_sharingAssignment;
 
-  uint16_t m_consensusLeaderID;
+  std::atomic<uint16_t> m_consensusLeaderID;
 
   std::mutex m_MutexScheduleDSMicroBlockConsensus;
   std::condition_variable cv_scheduleDSMicroBlockConsensus;
@@ -500,7 +494,7 @@ class DirectoryService : public Executable, public Broadcastable {
   std::atomic<uint32_t> m_viewChangeCounter;
 
   /// The ID number of this Zilliqa instance for use with consensus operations.
-  uint16_t m_consensusMyID;
+  std::atomic<uint16_t> m_consensusMyID;
 
   /// The epoch number when DS tries doing Rejoin
   uint64_t m_latestActiveDSBlockNum = 0;
@@ -538,6 +532,9 @@ class DirectoryService : public Executable, public Broadcastable {
   std::map<uint64_t, std::vector<DSGuardUpdateStruct>>
       m_lookupStoreForGuardNodeUpdate;
   std::atomic_bool m_awaitingToSubmitNetworkInfoUpdate = {false};
+
+  bool m_doRejoinAtDSConsensus = false;
+  bool m_doRejoinAtFinalConsensus = false;
 
   /// Constructor. Requires mediator reference to access Node and other global
   /// members.
@@ -577,7 +574,7 @@ class DirectoryService : public Executable, public Broadcastable {
   template <class Container>
   bool SaveCoinbaseCore(const std::vector<bool>& b1,
                         const std::vector<bool>& b2, const Container& shard,
-                        const uint32_t& shard_id, const uint64_t& epochNum);
+                        const int32_t& shard_id, const uint64_t& epochNum);
 
   /// Implements the Execute function inherited from Executable.
   bool Execute(const bytes& message, unsigned int offset, const Peer& from);
@@ -592,7 +589,8 @@ class DirectoryService : public Executable, public Broadcastable {
   void StartFirstTxEpoch();
 
   /// Begin next round of DS consensus
-  void StartNewDSEpochConsensus(bool fromFallback = false);
+  void StartNewDSEpochConsensus(bool fromFallback = false,
+                                bool isRejoin = false);
 
   static uint8_t CalculateNewDifficultyCore(
       uint8_t currentDifficulty, uint8_t minDifficulty, int64_t powSubmissions,
@@ -607,10 +605,9 @@ class DirectoryService : public Executable, public Broadcastable {
   void RunConsensusOnDSBlock(bool isRejoin = false);
   bool IsDSBlockVCState(unsigned char vcBlockState);
 
-  // Sort the PoW submissions. Put to public static function, so it can be
-  // covered by auto test.
-  static VectorOfPoWSoln SortPoWSoln(const MapOfPubKeyPoW& pows,
-                                     bool trimBeyondCommSize = false);
+  // Sort the PoW submissions
+  VectorOfPoWSoln SortPoWSoln(const MapOfPubKeyPoW& pows,
+                              bool trimBeyondCommSize = false);
   int64_t GetAllPoWSize() const;
 
   bool ProcessAndSendPoWPacketSubmissionToOtherDSComm();
@@ -620,6 +617,10 @@ class DirectoryService : public Executable, public Broadcastable {
 
   // For DS guard to update it's network information while in GUARD_MODE
   bool UpdateDSGuardIdentity();
+
+  // Get entire network peer info
+  void GetEntireNetworkPeerInfo(std::vector<std::pair<PubKey, Peer>>& peers,
+                                std::vector<PubKey>& pubKeys);
 
  private:
   static std::map<DirState, std::string> DirStateStrings;
@@ -637,6 +638,8 @@ class DirectoryService : public Executable, public Broadcastable {
   void ClearVCBlockVector();
   bool RunConsensusOnFinalBlockWhenDSPrimary(
       const RunFinalBlockConsensusOptions& options);
+  bool CheckDSPowPacketSubmissionFromNonDSCommittee(
+      const PubKey& submitterPubKey);
 };
 
 #endif  // __DIRECTORYSERVICE_H__

@@ -1,20 +1,18 @@
 /*
- * Copyright (c) 2018 Zilliqa
- * This source code is being disclosed to you solely for the purpose of your
- * participation in testing Zilliqa. You may view, compile and run the code for
- * that purpose and pursuant to the protocols and algorithms that are programmed
- * into, and intended by, the code. You may not do anything else with the code
- * without express permission from Zilliqa Research Pte. Ltd., including
- * modifying or publishing the code (or any part of it), and developing or
- * forming another public or private blockchain network. This source code is
- * provided 'as is' and no warranties are given as to title or non-infringement,
- * merchantability or fitness for purpose and, to the extent permitted by law,
- * all liability for your use of the code is disclaimed. Some programs in this
- * code are governed by the GNU General Public License v3.0 (available at
- * https://www.gnu.org/licenses/gpl-3.0.en.html) ('GPLv3'). The programs that
- * are governed by GPLv3.0 are those programs that are located in the folders
- * src/depends and tests/depends and which include a reference to GPLv3 in their
- * program files.
+ * Copyright (C) 2019 Zilliqa
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <algorithm>
@@ -39,6 +37,7 @@
 #include "libUtils/HashUtils.h"
 #include "libUtils/Logger.h"
 #include "libUtils/SanityChecks.h"
+#include "libUtils/ShardSizeCalculator.h"
 #include "libUtils/TimestampVerifier.h"
 #include "libUtils/UpgradeManager.h"
 
@@ -136,31 +135,35 @@ void DirectoryService::ComputeSharding(const VectorOfPoWSoln& sortedPoWSolns) {
   m_shards.clear();
   m_publicKeyToshardIdMap.clear();
 
-  if (sortedPoWSolns.size() < m_mediator.GetShardSize(false)) {
-    LOG_GENERAL(WARNING, "PoWs recvd less than one shard size. sortedPoWSolns: "
-                             << sortedPoWSolns.size());
+  // Cap the number of nodes based on MAX_SHARD_NODE_NUM
+  const uint32_t numNodesForSharding =
+      sortedPoWSolns.size() > MAX_SHARD_NODE_NUM ? MAX_SHARD_NODE_NUM
+                                                 : sortedPoWSolns.size();
+
+  LOG_GENERAL(INFO, "Number of PoWs received     = " << sortedPoWSolns.size());
+  LOG_GENERAL(INFO, "Number of PoWs for sharding = " << numNodesForSharding);
+
+  const uint32_t shardSize = m_mediator.GetShardSize(false);
+
+  // Generate the number of shards and node counts per shard
+  vector<uint32_t> shardCounts;
+  ShardSizeCalculator::GenerateShardCounts(shardSize, SHARD_SIZE_TOLERANCE_LO,
+                                           SHARD_SIZE_TOLERANCE_HI,
+                                           numNodesForSharding, shardCounts);
+
+  // Abort if zero shards generated
+  if (shardCounts.empty()) {
+    LOG_GENERAL(WARNING, "Zero shards generated");
+    return;
   }
 
-  auto numShardNodes = sortedPoWSolns.size() > MAX_SHARD_NODE_NUM
-                           ? MAX_SHARD_NODE_NUM
-                           : sortedPoWSolns.size();
-
-  uint32_t numOfComms = numShardNodes / m_mediator.GetShardSize(false);
-  uint32_t max_shard = numOfComms - 1;
-
-  if (numOfComms == 0) {
-    LOG_GENERAL(WARNING, "Cannot form even one committee "
-                             << " number of Pows " << sortedPoWSolns.size()
-                             << " Setting numOfcomms to be 1");
-    numOfComms = 1;
-    max_shard = 0;
-  }
-
-  uint32_t numNodesPerShard = numShardNodes / numOfComms;
-
-  for (unsigned int i = 0; i < numOfComms; i++) {
+  // Resize the shard map to the generated number of shards
+  for (unsigned int i = 0; i < shardCounts.size(); i++) {
     m_shards.emplace_back();
   }
+
+  // Push all the sorted PoW submissions into an ordered map with key =
+  // H(last_block_hash, pow_hash)
   map<array<unsigned char, BLOCK_HASH_SIZE>, PubKey> sortedPoWs;
   bytes lastBlockHash(BLOCK_HASH_SIZE);
 
@@ -171,11 +174,9 @@ void DirectoryService::ComputeSharding(const VectorOfPoWSoln& sortedPoWSolns) {
 
   bytes hashVec(BLOCK_HASH_SIZE + POW_SIZE);
   copy(lastBlockHash.begin(), lastBlockHash.end(), hashVec.begin());
-
   for (const auto& kv : sortedPoWSolns) {
     const PubKey& key = kv.second;
     const auto& powHash = kv.first;
-    // sort all PoW submissions according to H(last_block_hash, pow_hash)
     copy(powHash.begin(), powHash.end(), hashVec.begin() + BLOCK_HASH_SIZE);
 
     const bytes& sortHashVec = HashUtils::BytesToHash(hashVec);
@@ -184,25 +185,31 @@ void DirectoryService::ComputeSharding(const VectorOfPoWSoln& sortedPoWSolns) {
     sortedPoWs.emplace(sortHash, key);
   }
 
-  uint32_t i = 0, j = 0;
+  // Distribute the map-ordered nodes among the generated shards
+  // First fill up first shard, then second shard, ..., then final shard
+  uint32_t shard_index = 0;
   for (const auto& kv : sortedPoWs) {
+    // Move to next shard counter if current shard already filled up
+    if (shardCounts.at(shard_index) == 0) {
+      shard_index++;
+      // Stop if all shards filled up
+      if (shard_index == shardCounts.size()) {
+        break;
+      }
+    }
     if (DEBUG_LEVEL >= 5) {
       LOG_GENERAL(INFO, "[DSSORT] " << kv.second << " "
                                     << DataConversion::charArrToHexStr(kv.first)
                                     << endl);
     }
-
-    unsigned int shard_index = i / numNodesPerShard;
-    if (shard_index > max_shard) {
-      shard_index = j % (max_shard + 1);
-      j++;
-    }
-
+    // Put the node into the shard
     const PubKey& key = kv.second;
-    auto& shard = m_shards.at(shard_index);
-    shard.emplace_back(key, m_allPoWConns.at(key), m_mapNodeReputation[key]);
+    m_shards.at(shard_index)
+        .emplace_back(key, m_allPoWConns.at(key), m_mapNodeReputation[key]);
     m_publicKeyToshardIdMap.emplace(key, shard_index);
-    i++;
+
+    // Decrement remaining count for this shard
+    shardCounts.at(shard_index)--;
   }
 }
 
@@ -314,11 +321,13 @@ bool DirectoryService::VerifyPoWWinner(
                                .GetDSDifficulty();
         }
 
-        bool result = POW::GetInstance().PoWVerify(
-            m_pendingDSBlock->GetHeader().GetBlockNum(), expectedDSDiff,
+        auto headerHash = POW::GenHeaderHash(
             m_mediator.m_dsBlockRand, m_mediator.m_txBlockRand,
             peer.m_ipAddress, DSPowWinner.first, dsPowSoln.lookupId,
-            dsPowSoln.gasPrice, dsPowSoln.nonce,
+            dsPowSoln.gasPrice);
+        bool result = POW::GetInstance().PoWVerify(
+            m_pendingDSBlock->GetHeader().GetBlockNum(), expectedDSDiff,
+            headerHash, dsPowSoln.nonce,
             DataConversion::charArrToHexStr(dsPowSoln.result),
             DataConversion::charArrToHexStr(dsPowSoln.mixhash));
         if (!result) {
@@ -545,18 +554,17 @@ VectorOfPoWSoln DirectoryService::SortPoWSoln(const MapOfPubKeyPoW& mapOfPoWs,
 
   // Put it back to vector for easy manipulation and adjustment of the ordering
   VectorOfPoWSoln sortedPoWSolns;
-  if (trimBeyondCommSize && (COMM_SIZE > 0)) {
-    const unsigned int numNodesTotal = PoWOrderSorter.size();
-    const unsigned int numNodesAfterTrim =
-        (numNodesTotal < COMM_SIZE)
-            ? numNodesTotal
-            : numNodesTotal - (numNodesTotal % COMM_SIZE);
+  if (trimBeyondCommSize) {
+    const uint32_t numNodesTotal = PoWOrderSorter.size();
+    const uint32_t numNodesAfterTrim =
+        ShardSizeCalculator::GetTrimmedShardCount(
+            m_mediator.GetShardSize(false), SHARD_SIZE_TOLERANCE_LO,
+            SHARD_SIZE_TOLERANCE_HI, numNodesTotal);
 
     LOG_GENERAL(INFO, "Trimming the solutions sorted list from "
-                          << numNodesTotal << " to " << numNodesAfterTrim
-                          << " to avoid going over COMM_SIZE " << COMM_SIZE);
+                          << numNodesTotal << " to " << numNodesAfterTrim);
 
-    unsigned int count = 0;
+    uint32_t count = 0;
     if (!GUARD_MODE) {
       for (auto kv = PoWOrderSorter.begin();
            (kv != PoWOrderSorter.end()) && (count < numNodesAfterTrim);
@@ -579,9 +587,9 @@ VectorOfPoWSoln DirectoryService::SortPoWSoln(const MapOfPubKeyPoW& mapOfPoWs,
       // "FilteredPoWOrderSorter"
       // 5. Finally, sort "FilteredPoWOrderSorter" and stored result in
       // "PoWOrderSorter"
-      unsigned int trimmedGuardCount =
+      uint32_t trimmedGuardCount =
           ceil(numNodesAfterTrim * ConsensusCommon::TOLERANCE_FRACTION);
-      unsigned int trimmedNonGuardCount = numNodesAfterTrim - trimmedGuardCount;
+      uint32_t trimmedNonGuardCount = numNodesAfterTrim - trimmedGuardCount;
 
       if (trimmedGuardCount + trimmedNonGuardCount < numNodesAfterTrim) {
         LOG_GENERAL(WARNING,
@@ -736,6 +744,7 @@ bool DirectoryService::RunConsensusOnDSBlockWhenDSPrimary() {
     return false;
   }
 
+  m_mediator.m_node->m_myshardId = m_shards.size();
   BlockStorage::GetBlockStorage().PutShardStructure(
       m_shards, m_mediator.m_node->m_myshardId);
 
@@ -1119,6 +1128,11 @@ void DirectoryService::RunConsensusOnDSBlock(bool isRejoin) {
                                     << m_allDSPoWs.size());
 
   LOG_MARKER();
+
+  if (m_doRejoinAtDSConsensus) {
+    RejoinAsDS();
+  }
+
   SetState(DSBLOCK_CONSENSUS_PREP);
 
   {
