@@ -148,6 +148,12 @@ void Lookup::SetLookupNodes() {
         if (pubKey == m_mediator.m_selfKey.second) {
           m_level = level;
         }
+        if (find_if(m_lookupNodes.begin(), m_lookupNodes.end(),
+                    [&pubKey](const pair<PubKey, Peer>& x) {
+                      return (pubKey == x.first);
+                    }) != m_lookupNodes.end()) {
+          continue;
+        }
         m_lookupNodes.emplace_back(pubKey, lookup_node);
       }
     }
@@ -182,12 +188,6 @@ void Lookup::SetAboveLayer() {
           DataConversion::HexStrToUint8Vec(v.second.get<std::string>("pubkey")),
           0);
 
-      if (find_if(m_seedNodes.begin(), m_seedNodes.end(),
-                  [&pubKey](const pair<PubKey, Peer>& x) {
-                    return (pubKey == x.first);
-                  }) != m_seedNodes.end()) {
-        continue;
-      }
       m_seedNodes.emplace_back(pubKey, lookup_node);
     }
   }
