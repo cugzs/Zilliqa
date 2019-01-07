@@ -482,7 +482,7 @@ std::string AccountStoreSC<MAP>::GetCallContractCmdStr(
                     INPUT_BLOCKCHAIN_JSON + " -imessage " + INPUT_MESSAGE_JSON +
                     " -o " + OUTPUT_JSON + " -i " + INPUT_CODE + " -libdir " +
                     SCILLA_LIB + " -gaslimit " + std::to_string(available_gas) +
-                    " -disable-pp-json";
+                    " -disable-pp-json" + " -disable-validate-json";
   LOG_GENERAL(INFO, ret);
   return ret;
 }
