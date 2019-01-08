@@ -64,10 +64,12 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     include(InstallOpenSSL)
     set(OPENSSL_USE_STATIC_LIBS TRUE)
     set(OPENSSL_ROOT_DIR ${CMAKE_BINARY_DIR}/openssl)
+    include(InstallCURL)
 endif()
 
 find_package(OpenSSL 1.1 REQUIRED)
 include_directories(${OPENSSL_INCLUDE_DIR})
+find_package(CURL 7.63 REQUIRED HINTS ${CMAKE_BINARY_DIR}/curl)
 
 find_package(LevelDB REQUIRED)
 
